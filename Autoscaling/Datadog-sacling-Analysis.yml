@@ -1,0 +1,117 @@
+
+###APM to plan autoscaling###
+###Deploy a GKE Cluster
+##Deploy a GKE Standard Cluster
+##Deploy the Datadog agent using Helm
+##Deploy a application
+##Check the default dashboard
+##Check the Logs
+##Create a custom dashboard
+
+
+##Deploy GKE Cluster
+
+gcloud container clusters create "datadog" \
+  --machine-type="e2-medium" \
+  --num-nodes="2" \
+  --zone=us-east1-c
+
+## open datadog - Create API 
+## Take new API and Key ID
+https://app.datadoghq.com/signup
+
+https://app.datadoghq.com/account/settings/agent/latest?platform=kubernetes
+
+export DD_API_KEY=<YOUR_DATADOG_API_KEY>
+export DD_API_KEY=<YOUR_DATADOG_API_KEY>
+
+###Create value.yaml
+
+echo "datadog:
+  logs:
+    enabled: true
+    containerCollectAll: true
+clusterAgent:
+  enabled: true
+  replicas: 2
+  createPodDisruptionBudget: true
+agents:
+  tolerations:
+    - key: node-role.kubernetes.io/master
+      effect: NoSchedule
+clusterChecksRunner:
+  env: 
+    - name: DD_KUBELET_TLS_VERIFY
+      value: false" > values.yaml
+
+
+
+#######
+helm repo add datadog https://helm.datadoghq.com
+helm repo update
+helm install datadog -f values.yaml  \
+    --set datadog.apiKey=$DD_API_KEY \
+    --set datadog.appKey=$DD_APP_KEY \
+    datadog/datadog
+
+##kubectl get secrets - check your API Key 
+kubectl get secret datadog --template='{{index .data "api-key"}}' | base64 -d
+#####Deploy 
+
+###kubectl get deployments
+# Datadog Agent is running in your environment as a DaemonSet:
+kubectl get daemonset
+
+##Datadog agent 
+kubectl exec -ti $(kubectl get pods -l app=datadog -o custom-columns=:metadata.name) -- agent status
+
+##Deploy application 
+##Git : https://github.com/GoogleCloudPlatform/microservices-demo
+
+curl https://raw.githubusercontent.com/GoogleCloudPlatform/microservices-demo/main/release/kubernetes-manifests.yaml -o manifest.yaml
+
+##Apply Manifest to ur cluster
+kubectl apply -f manifest.yaml
+
+#deployment status
+kubectl get po -w
+
+#https://app.datadoghq.com/dashboard/lists
+
+#Important- link to K8 dash
+
+##https://app.datadoghq.com/dash/integration/30589/kubernetes-cluster-overview-dashboard
+
+
+##### pending list \\\ Pods pending
+
+kubectl get po | grep Pending
+
+
+#### start extra cluser - auto scale
+
+gcloud container clusters update datadog \
+    --enable-autoscaling \
+    --node-pool=default-pool \
+    --min-nodes=2 \
+    --max-nodes=5 \
+    --zone=us-east1-c
+
+
+#Status of Deployment
+kubectl get po -w
+
+
+##Access Url
+kubectl get svc frontend-external -o json | jq '.status.loadBalancer.ingress[].ip'
+
+##Logs Activaate
+https://app.datadoghq.com/logs/onboarding/container
+
+##Add log /// in value.yaml
+
+datadog:
+  ...
+  logs:
+    enabled: true
+    containerCollectAll: true
